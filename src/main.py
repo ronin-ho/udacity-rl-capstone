@@ -5,18 +5,9 @@ import gym
 from gym import wrappers, logger
 import csv
 
-class RandomAgent(object):
-    """The world's simplest agent!"""
-    def __init__(self, action_space):
-        self.action_space = action_space
+from agents.RandomAgent import RandomAgent
 
-    def act(self, observation, reward, done):
-        return self.action_space.sample()
-
-if __name__ == '__main__':
-    #parser = argparse.ArgumentParser(description=None)
-    #parser.add_argument('env_id', nargs='?', default='CartPole-v0', help='Select the environment to run')
-    #args = parser.parse_args()
+def run(agent_id):    
 
     # You can set the level to logger.DEBUG or logger.WARN if you
     # want to change the amount of output.
@@ -31,7 +22,13 @@ if __name__ == '__main__':
     outdir = './tmp/random-agent-results'
     env = wrappers.Monitor(env, directory=outdir, force=True)
     env.seed(0)
-    agent = RandomAgent(env.action_space)
+    #agent = RandomAgent(env.action_space)
+    agent = None
+    if(agent_id == 'RandomAgent'):
+        agent = RandomAgent(env.action_space)
+    else:
+        logger.error("Invalid Agent chosen!")
+        return
 
     episode_count = 100
     reward = 0
@@ -60,3 +57,8 @@ if __name__ == '__main__':
         # Close the env and write monitor result info to disk
         env.close()
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=None)
+    parser.add_argument('-a', dest='agent_id', nargs='?', help='Select a agent to run',required=True)
+    args = parser.parse_args()
+    run(args.agent_id)
