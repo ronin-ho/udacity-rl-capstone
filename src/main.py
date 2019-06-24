@@ -6,6 +6,7 @@ from gym import wrappers, logger
 import csv
 
 from agents.RandomAgent import RandomAgent
+from agents.DDPG import DDPG
 
 def run(agent_id):    
 
@@ -13,7 +14,7 @@ def run(agent_id):
     # want to change the amount of output.
     logger.setLevel(logger.INFO)
 
-    env = gym.make('LunarLander-v2')
+    env = gym.make('LunarLanderContinuous-v2')
 
     # You provide the directory to write to (can be an existing
     # directory, including one with existing data -- all monitor files
@@ -25,12 +26,14 @@ def run(agent_id):
     #agent = RandomAgent(env.action_space)
     agent = None
     if(agent_id == 'RandomAgent'):
-        agent = RandomAgent(env.action_space)
+        agent = RandomAgent(env)
+    elif(agent_id == 'DDPG'):
+        agent = DDPG(env)
     else:
         logger.error("Invalid Agent chosen!")
         return
 
-    episode_count = 100
+    episode_count = 1010
     reward = 0
     done = False
 
@@ -43,9 +46,12 @@ def run(agent_id):
     #
         for i in range(episode_count):
             ob = env.reset()
+            agent.reset_episode(ob)
+            logger.info("Start episode " + str(i))
             while True:
-                action = agent.act(ob, reward, done)
+                action = agent.act(ob)
                 ob, reward, done, _ = env.step(action)
+                agent.step(action, reward, ob, done)
                 if done:
                     to_write = [i] + [reward]
                     writer.writerow(to_write)
