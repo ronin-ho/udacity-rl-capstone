@@ -21,20 +21,20 @@ def run(agent_id):
     # will be namespaced). You can also dump to a tempdir if you'd
     # like: tempfile.mkdtemp().
     outdir = './tmp/random-agent-results'
-    env = wrappers.Monitor(env, directory=outdir, force=True)
+    #env = wrappers.Monitor(env, directory=outdir, force=True)
     env.seed(0)
     #agent = RandomAgent(env.action_space)
     agent = None
     if(agent_id == 'RandomAgent'):
-        agent = RandomAgent(env)
+        agent = RandomAgent(env.action_space)
     elif(agent_id == 'DDPG'):
         agent = DDPG(env)
     else:
         logger.error("Invalid Agent chosen!")
         return
 
-    episode_count = 1010
-    reward = 0
+    episode_count = 1000
+    score = 0
     done = False
 
     #
@@ -47,14 +47,25 @@ def run(agent_id):
         for i in range(episode_count):
             ob = env.reset()
             agent.reset_episode(ob)
-            logger.info("Start episode " + str(i))
+            score = 0
+            logger.info("Start episode " + str(i+1))
             while True:
                 action = agent.act(ob)
-                ob, reward, done, _ = env.step(action)
+                
+                reward = 0
+                for _ in range(3):
+                    ob, tmp_reward, done, _ = env.step(action)
+                    reward += tmp_reward
+                    if done:
+                        break
+                    
                 agent.step(action, reward, ob, done)
+                score += reward
                 if done:
-                    to_write = [i] + [reward]
+                    to_write = [i+1] + [score]
                     writer.writerow(to_write)
+                    if i % 50 ==0:
+                        csvfile.flush()
                     break
                 # Note there's no env.render() here. But the environment still can open window and
                 # render if asked by env.monitor: it calls env.render('rgb_array') to record video.

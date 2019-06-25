@@ -28,7 +28,7 @@ class Actor:
 
         # Initialize any other variables here
         self.l2 = 0.000001
-        self.lr = 0.005
+        self.lr = 0.0001
 
         self.build_model()
 
@@ -38,9 +38,9 @@ class Actor:
         states = layers.Input(shape=(self.state_size,), name='states')
 
         # Add hidden layers
-        net = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(states)
+        net = layers.Dense(units=400, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(states)
         net = layers.BatchNormalization()(net)
-        net = layers.Dense(units=200, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(net)
+        net = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2),kernel_initializer=layers.initializers.RandomUniform(minval=-0.002, maxval=0.002))(net)
         net = layers.BatchNormalization()(net)
 #         net = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(net)
 #         net = layers.BatchNormalization()(net)
@@ -50,7 +50,7 @@ class Actor:
 
         # Add final output layer with sigmoid activation
         raw_actions = layers.Dense(units=self.action_size, activation='tanh',
-            name='raw_actions')(net)
+            name='raw_actions',kernel_initializer=layers.initializers.RandomUniform(minval=-0.004, maxval=0.004))(net)
 
         # Scale [0, 1] output for each action dimension to proper range
         #actions = layers.Lambda(lambda x: (x * self.action_range) + self.action_low,
@@ -101,14 +101,14 @@ class Critic:
         actions = layers.Input(shape=(self.action_size,), name='actions')
 
         # Add hidden layer(s) for state pathway
-        net_states = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(states)
+        net_states = layers.Dense(units=400, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(states)
         net_states = layers.BatchNormalization()(net_states)
-        net_states = layers.Dense(units=200, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(net_states)
+        net_states = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2),kernel_initializer=layers.initializers.RandomUniform(minval=-0.002, maxval=0.002))(net_states)
 
         # Add hidden layer(s) for action pathway
         net_actions = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(actions)
-        net_actions = layers.BatchNormalization()(net_actions)
-        net_actions = layers.Dense(units=200, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(net_actions)
+        #net_actions = layers.BatchNormalization()(net_actions)
+        #net_actions = layers.Dense(units=200, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(net_actions)
 
         # Try different layer sizes, activations, add batch normalization, regularizers, etc.
 
@@ -121,7 +121,7 @@ class Critic:
         #net = layers.BatchNormalization()(net)
 
         # Add final output layer to prduce action values (Q values)
-        Q_values = layers.Dense(units=1, name='q_values')(net)
+        Q_values = layers.Dense(units=1, name='q_values',kernel_initializer=layers.initializers.RandomUniform(minval=-0.004, maxval=0.004))(net)
 
         # Create Keras model
         self.model = models.Model(inputs=[states, actions], outputs=Q_values)
@@ -214,8 +214,8 @@ class DDPG():
         self.noise = OUNoise(self.action_size, self.exploration_mu, self.exploration_theta, self.exploration_sigma)
 
         # Replay memory
-        self.buffer_size = 100000
-        self.batch_size = 64
+        self.buffer_size = 1000000
+        self.batch_size = 128
         self.memory = ReplayBuffer(self.buffer_size, self.batch_size)
         self.positive_memory = ReplayBuffer(self.buffer_size, 21)
 
