@@ -22,12 +22,11 @@ $pip install gym
 
 3. Execute the main.py with help options
 ```sh
-$usage: main.py [-h] -a [AGENT_ID] [-e [EPISODE_COUNT]] [-s [START_EPISODE]] [-l [LOAD_DIR]]
+$usage: main.py [-h] -a [AGENT_ID] [-t [IS_TRAINING]] [-l [LOAD_DIR]]
 
 optional arguments:
   -h, --help          Show this help message and exit
-  -a [AGENT_ID]       Agent to be used, e.g. DDPG, Random Agent
-  -e [EPISODE_COUNT]  Number of episode to be executed
-  -s [START_EPISODE]  The initial episode number
-  -l [LOAD_DIR]       Load network weight directory
+  -a [AGENT_ID]       Select a agent to run, e.g. DDPG, RandomAgent or RBFAgent
+  -t [IS_TRAINING]	  1 for training, 0 for testing
+  -l [LOAD_DIR]       Path to load model or weight
 ```
