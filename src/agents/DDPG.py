@@ -2,162 +2,13 @@ import numpy as np
 from keras import layers, models, optimizers
 from keras import backend as K
 from keras import regularizers
-#from keras import initializers
+from keras.models import Sequential, Model, load_model
+from keras.layers import Dense, Activation, Flatten, Input, Concatenate
 import random
 from collections import namedtuple, deque
 import copy
 
-
-class Actor:
-    """Actor (Policy) Model."""
-
-    def __init__(self, state_size, action_size, action_low, action_high):
-        """Initialize parameters and build model.
-        Params
-        ======
-            state_size (int): Dimension of each state
-            action_size (int): Dimension of each action
-            action_low (array): Min value of each action dimension
-            action_high (array): Max value of each action dimension
-        """
-        self.state_size = state_size
-        self.action_size = action_size
-        self.action_low = action_low
-        self.action_high = action_high
-        self.action_range = self.action_high - self.action_low
-
-        # Initialize any other variables here
-        self.l2 = 0.000001
-        self.lr = 0.0001
-
-        self.build_model()
-
-    def build_model(self):
-        """Build an actor (policy) network that maps states -> actions."""
-        # Define input layer (states)
-        states = layers.Input(shape=(self.state_size,), name='states')
-
-        # Add hidden layers
-        net = layers.Dense(units=400, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(states)
-        net = layers.BatchNormalization()(net)
-        net = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2),kernel_initializer=layers.initializers.RandomUniform(minval=-0.002, maxval=0.002))(net)
-        net = layers.BatchNormalization()(net)
-#         net = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(net)
-#         net = layers.BatchNormalization()(net)
-        
-
-        # Try different layer sizes, activations, add batch normalization, regularizers, etc.
-
-        # Add final output layer with sigmoid activation
-        raw_actions = layers.Dense(units=self.action_size, activation='tanh',
-            name='raw_actions',kernel_initializer=layers.initializers.RandomUniform(minval=-0.004, maxval=0.004))(net)
-
-        # Scale [0, 1] output for each action dimension to proper range
-        #actions = layers.Lambda(lambda x: (x * self.action_range) + self.action_low,
-        #    name='actions')(raw_actions)
-        # Directly output scale (-1,1) from tanh function
-        actions = layers.Lambda(lambda x: x,name='actions')(raw_actions)
-
-        # Create Keras model
-        self.model = models.Model(inputs=states, outputs=actions)
-
-        # Define loss function using action value (Q value) gradients
-        action_gradients = layers.Input(shape=(self.action_size,))
-        loss = K.mean(-action_gradients * actions)
-
-        # Incorporate any additional losses here (e.g. from regularizers)
-
-        # Define optimizer and training function
-        optimizer = optimizers.Adam(lr=self.lr)
-        updates_op = optimizer.get_updates(params=self.model.trainable_weights, loss=loss)
-        self.train_fn = K.function(
-            inputs=[self.model.input, action_gradients, K.learning_phase()],
-            outputs=[],
-            updates=updates_op)
-
-class Critic:
-    """Critic (Value) Model."""
-
-    def __init__(self, state_size, action_size):
-        """Initialize parameters and build model.
-        Params
-        ======
-            state_size (int): Dimension of each state
-            action_size (int): Dimension of each action
-        """
-        self.state_size = state_size
-        self.action_size = action_size
-
-        # Initialize any other variables here
-        self.l2 = 0.000001
-        self.lr = 0.001
-
-        self.build_model()
-
-    def build_model(self):
-        """Build a critic (value) network that maps (state, action) pairs -> Q-values."""
-        # Define input layers
-        states = layers.Input(shape=(self.state_size,), name='states')
-        actions = layers.Input(shape=(self.action_size,), name='actions')
-
-        # Add hidden layer(s) for state pathway
-        net_states = layers.Dense(units=400, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(states)
-        net_states = layers.BatchNormalization()(net_states)
-        net_states = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2),kernel_initializer=layers.initializers.RandomUniform(minval=-0.002, maxval=0.002))(net_states)
-
-        # Add hidden layer(s) for action pathway
-        net_actions = layers.Dense(units=300, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(actions)
-        #net_actions = layers.BatchNormalization()(net_actions)
-        #net_actions = layers.Dense(units=200, activation='relu',kernel_regularizer=regularizers.l2(self.l2))(net_actions)
-
-        # Try different layer sizes, activations, add batch normalization, regularizers, etc.
-
-        # Combine state and action pathways
-        net = layers.Add()([net_states, net_actions])
-        net = layers.Activation('relu')(net)
-
-        # Add more layers to the combined network if needed
-        #net = layers.Dense(units=32, activation='relu')(net)
-        #net = layers.BatchNormalization()(net)
-
-        # Add final output layer to prduce action values (Q values)
-        Q_values = layers.Dense(units=1, name='q_values',kernel_initializer=layers.initializers.RandomUniform(minval=-0.004, maxval=0.004))(net)
-
-        # Create Keras model
-        self.model = models.Model(inputs=[states, actions], outputs=Q_values)
-
-        # Define optimizer and compile model for training with built-in loss function
-        optimizer = optimizers.Adam(lr=self.lr)
-        self.model.compile(optimizer=optimizer, loss='mse')
-
-        # Compute action gradients (derivative of Q values w.r.t. to actions)
-        action_gradients = K.gradients(Q_values, actions)
-
-        # Define an additional function to fetch action gradients (to be used by actor model)
-        self.get_action_gradients = K.function(
-            inputs=[*self.model.input, K.learning_phase()],
-            outputs=action_gradients)        
-
-class OUNoise:
-    """Ornstein-Uhlenbeck process."""
-
-    def __init__(self, size, mu, theta, sigma):
-        """Initialize parameters and noise process."""
-        self.mu = mu * np.ones(size)
-        self.theta = theta
-        self.sigma = sigma
-        self.reset()
-
-    def reset(self):
-        """Reset the internal state (= noise) to mean (mu)."""
-        self.state = copy.copy(self.mu)
-
-    def sample(self):
-        """Update internal state and return it as a noise sample."""
-        x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(len(x))
-        self.state = x + dx
-        return self.state
+from agents.util import *
 
 class ReplayBuffer:
     """Fixed-size buffer to store experience tuples."""
@@ -190,93 +41,171 @@ class DDPG():
     """Reinforcement Learning agent that learns using DDPG."""
     def __init__(self, task):
         self.task = task
+        self.state_shape = task.observation_space.shape
         self.state_size = task.observation_space.shape[0]
         self.action_size = task.action_space.shape[0]
         self.action_low = task.action_space.low
         self.action_high = task.action_space.high
 
-        # Actor (Policy) Model
-        self.actor_local = Actor(self.state_size, self.action_size, self.action_low, self.action_high)
-        self.actor_target = Actor(self.state_size, self.action_size, self.action_low, self.action_high)
-
-        # Critic (Value) Model
-        self.critic_local = Critic(self.state_size, self.action_size)
-        self.critic_target = Critic(self.state_size, self.action_size)
-
-        # Initialize target model parameters with local model parameters
-        self.critic_target.model.set_weights(self.critic_local.model.get_weights())
-        self.actor_target.model.set_weights(self.actor_local.model.get_weights())
-
         # Noise process
         self.exploration_mu = 0
         self.exploration_theta = 0.15
-        self.exploration_sigma = 0.2
+        self.exploration_sigma = 0.1
+        self.noise_epsilon = 0.99
+        self.noise_decay_rate = 0.999998
         self.noise = OUNoise(self.action_size, self.exploration_mu, self.exploration_theta, self.exploration_sigma)
 
         # Replay memory
         self.buffer_size = 1000000
-        self.batch_size = 128
+        self.batch_size = 64
         self.memory = ReplayBuffer(self.buffer_size, self.batch_size)
-        self.positive_memory = ReplayBuffer(self.buffer_size, 21)
 
         # Algorithm parameters
         self.gamma = 0.99  # discount factor
         self.tau = 0.001  # for soft update of target parameters
 
+        # Learning Rate
+        self.actor_lr = 0.0001
+        self.critic_lr = 0.001
+        
+        self.state_processor = None
 
-    def reset_episode(self, state):
+
+    def build_actor(self):
+        state_input = Input(shape=(1,) + self.state_shape, name='state_input')
+        state_net = Flatten()(state_input)
+        state_net = Dense(400)(state_net)
+        state_net = Activation('relu')(state_net)
+        state_net = Dense(300)(state_net)
+        state_net = Activation('relu')(state_net)
+        state_net = Dense(self.action_size)(state_net)
+        state_net = Activation('tanh')(state_net)
+        actor = Model(inputs=[state_input], outputs=state_net)
+        return actor
+        
+    def build_critic(self):
+        action_input = Input(shape=(self.action_size,), name='action_input')
+        state_input = Input(shape=(1,) + self.state_shape, name='state_input')
+        net = Flatten()(state_input)
+        net = Dense(400)(net)
+        net = Activation('relu')(net)
+        net = Concatenate()([net, action_input])
+        net = Dense(300)(net)
+        net = Activation('relu')(net)
+        net = Dense(1)(net)
+        net = Activation('linear')(net)
+        critic = Model(inputs=[state_input, action_input], outputs=net)
+        return critic
+
+    def build_models(self):
+        # Set up target network
+        self.actor_local = self.build_actor()
+        self.actor_local_optimizer = optimizers.Adam(lr=self.actor_lr)
+        self.actor_local.compile(optimizer=self.actor_local_optimizer, loss='mse')
+
+        self.actor_target = self.build_actor()
+        self.actor_target_optimizer = optimizers.Adam(lr=self.actor_lr)
+        self.actor_target.compile(optimizer=self.actor_target_optimizer, loss='mse')
+
+        self.critic_local = self.build_critic()
+        self.critic_local_optimizer = optimizers.Adam(lr=self.critic_lr)
+        self.critic_local.compile(optimizer=self.critic_local_optimizer, loss='mse')
+
+        self.critic_target = self.build_critic()
+        self.critic_target_optimizer = optimizers.Adam(lr=self.critic_lr)
+        self.critic_target.compile(optimizer=self.critic_target_optimizer, loss='mse')
+
+        # Copy model weight
+        self.critic_target.set_weights(self.critic_local.get_weights())
+        self.actor_target.set_weights(self.actor_local.get_weights())
+
+        state_inputs = Input(shape=(1,) + self.state_shape, name='state_inputs')
+        actions = self.actor_local([state_inputs])
+        q_values = self.critic_local([state_inputs, actions])
+        updates = self.actor_local_optimizer.get_updates(params=self.actor_local.trainable_weights, loss=-K.mean(q_values))
+        self.actor_train_fn = K.function([state_inputs] + [K.learning_phase()], [self.actor_local(state_inputs)], updates=updates)
+        
+        
+    def reset_episode(self):
         self.noise.reset()
-        self.last_state = state
 
-        return state
-
-    def step(self, action, reward, next_state, done):
+    def step(self, last_state, action, reward, next_state, done):
 
         # Save experience / reward
-        self.memory.add(self.last_state, action, reward, next_state, done)
+        self.memory.add(last_state, action, reward, next_state, done)
         
         # Learn, if enough samples are available in memory
         if len(self.memory) > self.batch_size:
             experiences = self.memory.sample()
             self.learn(experiences)
-            
-        # Roll over last state and action
-        self.last_state = next_state
-        
+    
+    def step_without_memory(self):
+
+        # Learn, if enough samples are available in memory
+        if len(self.memory) > self.batch_size:
+            experiences = self.memory.sample()
+            self.learn(experiences)
+    
     def act(self, state):
         """Returns actions for given state(s) as per current policy."""
-        state = np.reshape(state, [-1, self.state_size])
-        action = self.actor_local.model.predict(state)[0]
-        action = action + self.noise.sample()
-        action = np.clip(action, -1, +1).astype(np.float32)
-        #return list(action + self.noise.sample())  # add some noise for exploration
+        
+        state = [state]
+        batch = np.array([state])
+        normalized_state = self.normalize_states(batch)
+        
+        action = self.actor_local.predict(normalized_state)[0]
+        
+        #Noise decay
+        noise = self.noise.sample() * self.noise_epsilon
+        self.noise_epsilon = self.noise_epsilon * self.noise_decay_rate
+        
+        action = action + noise
+        action = np.clip(action, self.action_low, self.action_high).astype(np.float32)
         return action
 
     def learn(self, experiences):
         """Update policy and value parameters using given batch of experience tuples."""
-        # Convert experience tuples to separate arrays for each element (states, actions, rewards, etc.)
-        states = np.vstack([e.state for e in experiences if e is not None])
-        actions = np.array([e.action for e in experiences if e is not None]).astype(np.float32).reshape(-1, self.action_size)
-        rewards = np.array([e.reward for e in experiences if e is not None]).astype(np.float32).reshape(-1, 1)
-        dones = np.array([e.done for e in experiences if e is not None]).astype(np.uint8).reshape(-1, 1)
-        next_states = np.vstack([e.next_state for e in experiences if e is not None])
-
+        states = []
+        actions = []
+        rewards = []
+        dones = []
+        next_states = []
+        
+        for e in experiences:
+            states.append(np.array([e.state]))
+            actions.append(e.action)
+            rewards.append(e.reward)
+            dones.append(e.done)
+            next_states.append(np.array([e.next_state]))
+            
+        states = np.array(states)
+        next_states = np.array(next_states)
+        rewards = np.array(rewards)
+        actions = np.array(actions)
+        dones = np.array(dones)
+        
+        # Noramlize the states
+        states = self.normalize_states(states)
+        next_states = self.normalize_states(next_states)
+        
+        assert actions.shape == (self.batch_size, self.action_size)
+        
         # Get predicted next-state actions and Q values from target models
         # Q_targets_next = critic_target(next_state, actor_target(next_state))
-        actions_next = self.actor_target.model.predict_on_batch(next_states)
-        Q_targets_next = self.critic_target.model.predict_on_batch([next_states, actions_next])
+        actions_next = self.actor_target.predict_on_batch(next_states)
+        Q_targets_next = self.critic_target.predict_on_batch([next_states, actions_next]).flatten()
 
         # Compute Q targets for current states and train critic model (local)
         Q_targets = rewards + self.gamma * Q_targets_next * (1 - dones)
-        self.critic_local.model.train_on_batch(x=[states, actions], y=Q_targets)
+        Q_targets = Q_targets.reshape(self.batch_size, 1)
+        self.critic_local.train_on_batch(x=[states, actions], y=Q_targets)
 
-        # Train actor model (local)
-        action_gradients = np.reshape(self.critic_local.get_action_gradients([states, actions, 0]), (-1, self.action_size))
-        self.actor_local.train_fn([states, action_gradients, 1])  # custom training function
-
+        # Execute custom training function to train actor network
+        self.actor_train_fn([states] + [1])
+        
         # Soft-update target models
-        self.soft_update(self.critic_local.model, self.critic_target.model)
-        self.soft_update(self.actor_local.model, self.actor_target.model)   
+        self.soft_update(self.critic_local, self.critic_target)
+        self.soft_update(self.actor_local, self.actor_target)   
 
     def soft_update(self, local_model, target_model):
         """Soft update model parameters."""
@@ -287,16 +216,35 @@ class DDPG():
 
         new_weights = self.tau * local_weights + (1 - self.tau) * target_weights
         target_model.set_weights(new_weights)
-        
+       
+    def normalize_states(self, states):
+        if self.state_processor is None:
+            self.state_processor = WhiteningNormalizer(shape=states.shape[1:], dtype=states.dtype)
+        self.state_processor.update(states)
+        return self.state_processor.normalize(states)
         
     def save_weight(self, path):
-        self.critic_local.model.save_weights(path + 'critic_local.h5')
-        self.actor_local.model.save_weights(path + 'actor_local.h5')
-        self.critic_target.model.save_weights(path + 'critic_target.h5')
-        self.actor_target.model.save_weights(path + 'actor_target.h5')
+        self.critic_local.save_weights(path + 'critic_local.h5')
+        self.actor_local.save_weights(path + 'actor_local.h5')
+        self.critic_target.save_weights(path + 'critic_target.h5')
+        self.actor_target.save_weights(path + 'actor_target.h5')
+        
+        self.critic_local.save(path + 'critic_local_model.h5')
+        self.actor_local.save(path + 'actor_local_model.h5')
+        self.critic_target.save(path + 'critic_target_model.h5')
+        self.actor_target.save(path + 'actor_target_model.h5')
         
     def load_weight(self, path):
-        self.critic_local.model.load_weights(path + 'critic_local.h5')
-        self.actor_local.model.load_weights(path + 'actor_local.h5')
-        self.critic_target.model.load_weights(path + 'critic_target.h5')
-        self.actor_target.model.load_weights(path + 'actor_target.h5')
+        self.critic_local.load_weights(path + 'critic_local.h5')
+        self.actor_local.load_weights(path + 'actor_local.h5')
+        self.critic_target.load_weights(path + 'critic_target.h5')
+        self.actor_target.load_weights(path + 'actor_target.h5')
+        
+    def load_model(self, path):
+        self.critic_loca = load_model(path + 'critic_local_model.h5')
+        self.actor_local = load_model(path + 'actor_local_model.h5')
+        self.critic_target = load_model(path + 'critic_target_model.h5')
+        self.actor_target = load_model(path + 'actor_target_model.h5')
+
+        
+        
