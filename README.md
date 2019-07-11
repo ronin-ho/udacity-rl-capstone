@@ -35,13 +35,13 @@ To launch a DDPG Agent, you can enter
 ```sh
 $python3 main.py -a DDPG &
 ```
-The reward episode csv file will be generated at ./results/<timestamp>-DDPG/reward.csv
+The reward episode csv file will be generated at ./results/{timestamp}-DDPG/reward.csv
 
 To load a DDPG Agent model for testing, you can enter
 ```sh
 $python3 main.py -a DDPG -t 0 -l ../model &
 ```
-The agent will exeucte 5 episodes and generate a reward episode csv file at ./results/<timestamp>-DDPG/reward.csv
+The agent will exeucte 5 episodes and generate a reward episode csv file at ./results/{timestamp}-DDPG/reward.csv
 
 By default, the program does not generate a video file. You have to uncomment below line in main.py before starting the training or testing
 ```python
