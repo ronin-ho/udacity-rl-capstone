@@ -21,7 +21,8 @@ $pip3 install box2d box2d-kengz
 3. Change the directory to src folder
 4. Execute the main.py with help options
 ```sh
-$usage: python3 main.py [-h] -a [AGENT_ID] [-t [IS_TRAINING]] [-l [LOAD_DIR]]
+$python3 main.py -h
+$usage: main.py [-h] -a [AGENT_ID] [-t [IS_TRAINING]] [-l [LOAD_DIR]]
 
 optional arguments:
   -h, --help          Show this help message and exit
