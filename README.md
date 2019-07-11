@@ -31,13 +31,13 @@ optional arguments:
   -l [LOAD_DIR]       Path to load model
 ```
 
-To launch a DDPG Agent, you can enter
+5. To launch a DDPG Agent, you can enter
 ```sh
 $python3 main.py -a DDPG &
 ```
 The reward episode csv file will be generated at ./results/{timestamp}-DDPG/reward.csv
 
-To load a DDPG Agent model for testing, you can enter
+6. To load a DDPG Agent model for testing, you can enter
 ```sh
 $python3 main.py -a DDPG -t 0 -l ../model &
 ```
