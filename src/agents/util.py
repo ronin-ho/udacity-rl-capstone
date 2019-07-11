@@ -43,7 +43,7 @@ class NormalActionNoise:
     def reset(self):
         return
     
-# Based on https://github.com/openai/baselines/blob/master/baselines/common/mpi_running_mean_std.py
+# Based on https://github.com/keras-rl/keras-rl/blob/master/rl/util.py
 class WhiteningNormalizer(object):
     def __init__(self, shape, eps=1e-2, dtype=np.float64):
         self.eps = eps

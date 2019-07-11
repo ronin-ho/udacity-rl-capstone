@@ -68,7 +68,8 @@ class DDPG():
         self.actor_lr = 0.0001
         self.critic_lr = 0.001
         
-        self.state_processor = None
+        self.use_normalizer = False
+        self.state_normalizer = None
 
 
     def build_actor(self):
@@ -159,7 +160,9 @@ class DDPG():
         noise = self.noise.sample() * self.noise_epsilon
         self.noise_epsilon = self.noise_epsilon * self.noise_decay_rate
         
-        action = action + noise
+        if K.learning_phase():
+            action = action + noise
+            
         action = np.clip(action, self.action_low, self.action_high).astype(np.float32)
         return action
 
@@ -191,7 +194,6 @@ class DDPG():
         assert actions.shape == (self.batch_size, self.action_size)
         
         # Get predicted next-state actions and Q values from target models
-        # Q_targets_next = critic_target(next_state, actor_target(next_state))
         actions_next = self.actor_target.predict_on_batch(next_states)
         Q_targets_next = self.critic_target.predict_on_batch([next_states, actions_next]).flatten()
 
@@ -218,10 +220,13 @@ class DDPG():
         target_model.set_weights(new_weights)
        
     def normalize_states(self, states):
-        if self.state_processor is None:
-            self.state_processor = WhiteningNormalizer(shape=states.shape[1:], dtype=states.dtype)
-        self.state_processor.update(states)
-        return self.state_processor.normalize(states)
+        if self.use_normalizer:
+            if self.state_normalizer is None:
+                self.state_normalizer = WhiteningNormalizer(shape=states.shape[1:], dtype=states.dtype)
+            self.state_normalizer.update(states)
+            return self.state_normalizer.normalize(states)
+        else:
+            return states
         
     def save_weight(self, path):
         self.critic_local.save_weights(path + 'critic_local.h5')
@@ -241,7 +246,7 @@ class DDPG():
         self.actor_target.load_weights(path + 'actor_target.h5')
         
     def load_model(self, path):
-        self.critic_loca = load_model(path + 'critic_local_model.h5')
+        self.critic_local = load_model(path + 'critic_local_model.h5')
         self.actor_local = load_model(path + 'actor_local_model.h5')
         self.critic_target = load_model(path + 'critic_target_model.h5')
         self.actor_target = load_model(path + 'actor_target_model.h5')

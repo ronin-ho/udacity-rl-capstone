@@ -8,6 +8,7 @@ from gym import wrappers
 import csv
 import logging
 from copy import deepcopy
+from keras import backend as K
 
 import numpy as np
 
@@ -47,7 +48,22 @@ def run(agent_id, is_training, load_dir):
 
     if load_dir is not None:
         logger.info("Load model at " + load_dir)
-        agent.load_weight(load_dir + '/')
+        #agent.load_weight(load_dir + '/')
+        agent.load_model(load_dir + '/')
+    
+    # Initialize variables
+    episode = np.int16(1)
+    step = np.int16(0)
+    max_steps = 1000000
+    max_episodes = 1100 + episode
+    
+    if not is_training:
+        logger.info("it is now testing")
+        K.set_learning_phase(0)
+        max_episodes = 5 + episode
+    else:
+        K.set_learning_phase(1)
+        
     
     file_output = outdir + 'reward.csv'
     labels = ['episode','reward']
@@ -55,12 +71,8 @@ def run(agent_id, is_training, load_dir):
         writer = csv.writer(csvfile)
         writer.writerow(labels)
 
-        episode = np.int16(1)
-        step = np.int16(0)
         observation = None
         episode_reward = None
-        max_steps = 1000000
-        max_episodes = 1100 + episode
         
         try:
             while step < max_steps and episode < max_episodes:
@@ -96,8 +108,9 @@ def run(agent_id, is_training, load_dir):
                 if done:
                     # Act on the final state
                     # Step on final state but without adding to memory as next state is the reset state
-                    action = agent.act(next_state)
-                    agent.step_without_memory()
+                    if is_training:
+                        action = agent.act(next_state)
+                        agent.step_without_memory()
 
                     to_write = [episode] + [episode_reward]
                     writer.writerow(to_write)
